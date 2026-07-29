@@ -274,6 +274,34 @@ There is no pointer-trail feature in Cinnamon or X11 — no gsettings key, no
 - A high-visibility cursor theme — `GoogleDot-Black`, `HighContrast` and
   `XCursor-Pro-*` ship with Mint (`ls /usr/share/icons/`).
 
+## Extra card games without installing anything
+
+`aisleriot` (the `sol` binary, package used for "AisleRiot Solitaire") ships ~80
+variants, so FreeCell etc. need no extra package — just a second `.desktop`
+pointing at the variation:
+
+```ini
+Exec=/usr/games/sol --variation=freecell
+```
+
+Confirm a variation name from the compiled game modules rather than guessing:
+`dpkg -L aisleriot | grep -i freecell` → `.../aisleriot/guile/3.0/freecell.go`.
+
+Give it a **different icon from plain Solitaire**, or the customer can't tell the
+two launchers apart. Mint ships `gnome-freecell` (three fanned cards) even though
+nothing uses it — but only under `Mint-X`, not the active `Mint-Y` theme, so
+reference it by absolute path instead of icon name:
+
+```bash
+rsvg-convert -w 256 -h 256 /usr/share/icons/Mint-X/apps/96/gnome-freecell.svg \
+             -o ~/.local/share/icons/freecell.png
+```
+
+> **Gotcha:** don't preview an SVG with ImageMagick `convert` — its built-in MSVG
+> renderer produced a black square for this icon and it looks like a broken file.
+> Use `rsvg-convert` (installed by default). `kpat`/`kmines` would also give you
+> FreeCell but pull in ~165 Qt/KDE packages versus 6 for the GTK games.
+
 ## Capping the number of Chrome windows
 
 `chrome-window-limit.sh` in this repo. Install and autostart it per user:
