@@ -3,21 +3,40 @@ set -euo pipefail
 
 # Personal Linux dev machine setup
 #
-# Usage:
-#   bash setup.sh [-y|--yes]
-#
-# Options:
-#   -y, --yes   Answer yes to all optional prompts (unattended install)
-#
 # Notes: Requires apt-based distro (tested on Ubuntu/Mint)
 
 log() { echo -e "\n==> $*"; }
 
+usage() {
+  cat <<'USAGE'
+Usage: bash setup.sh [options]
+
+Options:
+  -y, --yes               Answer yes to any prompt not already set by a flag
+      --keep-libreoffice  Keep LibreOffice (no prompt)
+      --remove-libreoffice
+                          Remove LibreOffice except Calc (no prompt)
+      --keep-bluetooth    Leave Bluetooth enabled (no prompt)
+      --disable-bluetooth Disable Bluetooth (no prompt)
+  -h, --help              Show this help
+
+Flags win over --yes and suppress the matching prompt, which makes remote
+and unattended runs deterministic. With no flags and no terminal, prompts
+default to yes.
+USAGE
+}
+
 ASSUME_YES=0
+OPT_LIBREOFFICE=""   # "" = ask, 0 = keep, 1 = remove
+OPT_BLUETOOTH=""     # "" = ask, 0 = keep, 1 = disable
 for arg in "$@"; do
   case "$arg" in
-    -y|--yes) ASSUME_YES=1 ;;
-    -h|--help) sed -n '3,12p' "$0"; exit 0 ;;
+    -y|--yes)              ASSUME_YES=1 ;;
+    --keep-libreoffice)    OPT_LIBREOFFICE=0 ;;
+    --remove-libreoffice)  OPT_LIBREOFFICE=1 ;;
+    --keep-bluetooth)      OPT_BLUETOOTH=0 ;;
+    --disable-bluetooth)   OPT_BLUETOOTH=1 ;;
+    -h|--help)             usage; exit 0 ;;
     *) echo "Unknown option: $arg (try --help)" >&2; exit 1 ;;
   esac
 done
@@ -38,14 +57,27 @@ confirm() {
   [[ ! "$reply" =~ ^[Nn] ]]
 }
 
+# decide <preset> <question>: honour an explicit flag if given, else prompt.
+decide() {
+  local preset="$1" question="$2"
+  if [[ "$preset" == "1" ]]; then
+    echo "  ?? $question -> yes (flag)"
+    return 0
+  elif [[ "$preset" == "0" ]]; then
+    echo "  ?? $question -> no (flag)"
+    return 1
+  fi
+  confirm "$question"
+}
+
 # ---------------- Ask everything up front, then run unattended ----------------
 log "Setup options"
 
 REMOVE_LIBREOFFICE=0
-confirm "Remove LibreOffice Writer/Impress/Draw/Math/Base? (Calc is kept)" && REMOVE_LIBREOFFICE=1
+decide "$OPT_LIBREOFFICE" "Remove LibreOffice Writer/Impress/Draw/Math/Base? (Calc is kept)" && REMOVE_LIBREOFFICE=1
 
 DISABLE_BLUETOOTH=0
-confirm "Disable Bluetooth? (bluetooth + blueman-mechanism services)" && DISABLE_BLUETOOTH=1
+decide "$OPT_BLUETOOTH" "Disable Bluetooth? (bluetooth + blueman-mechanism services)" && DISABLE_BLUETOOTH=1
 
 # ---------------- APT mirrors ----------------
 # Point Main (Mint) and Base (Ubuntu) at fast mirrors. Codenames are read from
