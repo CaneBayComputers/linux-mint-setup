@@ -114,6 +114,20 @@ StartupNotify=true
 if you want a standalone window with no tabs or address bar — but for most
 customers the normal window is better, since they can still browse elsewhere.
 
+**Add `--new-window`** so each launcher opens its own window instead of adding
+a tab to whatever Chrome window is already open. Much easier to follow for a
+customer who struggles with tab strips — each site then gets its own button in
+the window list:
+
+```ini
+Exec=/usr/bin/google-chrome-stable --new-window https://www.yahoo.com
+```
+
+For the main Chrome entry, only change the `Exec=` under `[Desktop Entry]` —
+leave the `[Desktop Action ...]` Exec lines alone, or the right-click
+"New Window" / "New Incognito Window" items break. A naive
+`sed 's/^Exec=.*/.../'` hits all three.
+
 Then `update-desktop-database ~/.local/share/applications` and check it with
 `desktop-file-validate` (silent output = valid).
 
@@ -267,6 +281,18 @@ print(ImageChops.difference(a,b).getbbox())
 - If it did crash, fix `profile.exit_type` to `Normal` and `exited_cleanly` to
   `true` in `~/.config/google-chrome/Default/Preferences` — but **only while
   Chrome is closed**, otherwise it overwrites the file on exit.
+- Cleanest way to close test windows is the window manager, not signals:
+  ```bash
+  wmctrl -lx | grep -i chrome | awk '{print $1}' | while read -r w; do wmctrl -i -c "$w"; done
+  ```
+  `wmctrl -c` sends `WM_DELETE_WINDOW`, so Chrome exits normally. Verify with
+  `exit_type: Normal` afterwards.
+
+> **Testing gotcha:** to prove `--new-window` works you must launch it while a
+> Chrome window is *already open*. Chrome may have background processes but zero
+> windows (`pgrep` says 14, `wmctrl -lx | grep -ci chrome` says 0) — launching
+> from that state opens a window no matter what the flag says, and proves
+> nothing. Count windows with `wmctrl`, not processes with `pgrep`.
 
 ---
 
