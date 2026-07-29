@@ -91,9 +91,33 @@ Sources that actually return usable sizes:
 | Yahoo | `https://s.yimg.com/cv/apiv2/social/images/yahoo_default_logo.png` | 500x500 |
 | Gmail | `https://www.gstatic.com/images/branding/product/1x/gmail_2020q4_512dp.png` | 512x512 |
 
+| Google "G" | `https://www.gstatic.com/images/branding/product/1x/googleg_512dp.png` | 512x512 |
+
 Dead ends: `https://www.google.com/s2/favicons?domain=X&sz=256` ignores `sz` and
 caps out at 48px, too blurry for a large panel. `https://www.yahoo.com/favicon.ico`
 returns HTTP 429. `s.yimg.com/rz/l/favicon.ico` works but is only 32x32.
+
+**For an arbitrary site, don't settle for `/favicon.ico`** — it's often 16x16.
+Fetch the page and look for `apple-touch-icon`, which is usually 180px+:
+
+```bash
+curl -sL -A 'Mozilla/5.0' https://example.com/ -o page.html
+grep -oiE '<link[^>]*rel="[^"]*icon[^"]*"[^>]*>' page.html
+grep -oiE '<meta[^>]*property="og:image"[^>]*>' page.html
+```
+
+Sites on the TownNews/BLOX CDN (many US local papers, e.g. postandcourier.com)
+serve icons through `bloximages.*.vip.townnews.com` with a `?resize=W%2CH`
+parameter. **Drop the parameter entirely to get the original** — that turned a
+180x180 apple-touch-icon into the full 800x800 source.
+
+Always render a candidate at actual panel size before committing to it; a wide
+wordmark that looks great at 500px can be unreadable at 48px:
+
+```bash
+convert logo.png -resize 72x72 -background white -gravity center \
+        -extent 72x72 -scale 288x288 preview.png   # 4x magnified preview
+```
 
 **2. Desktop entry** in `~/.local/share/applications/yahoo.desktop`:
 
@@ -167,6 +191,12 @@ Leave `__md5__` alone; it tracks the schema, not the values.
 >   /org/Cinnamon org.Cinnamon.ReloadXlet \
 >   string:'panel-launchers@cinnamon.org' string:'APPLET'
 > ```
+>
+> Send it as a **separate step**, not chained onto the write in the same script.
+> Cinnamon's file monitor needs a moment to notice the JSON changed; reloading
+> immediately reloads the stale in-memory copy and the new launcher silently
+> doesn't appear. If it doesn't show up, just send `ReloadXlet` again — check
+> the on-disk JSON first to confirm the write itself succeeded.
 
 > **Second gotcha:** `ReloadXlet` picks up *list* changes but NOT a changed
 > `Icon=` on an existing entry — Cinnamon caches resolved app icons separately.
@@ -243,6 +273,42 @@ There is no pointer-trail feature in Cinnamon or X11 — no gsettings key, no
   Tune with `cross-hairs-thickness`, `cross-hairs-color`, `cross-hairs-opacity`.
 - A high-visibility cursor theme — `GoogleDot-Black`, `HighContrast` and
   `XCursor-Pro-*` ship with Mint (`ls /usr/share/icons/`).
+
+## Titlebar height / close button size — mostly a dead end
+
+Raising `org.cinnamon.desktop.wm.preferences titlebar-font` does **not** make the
+titlebar or its buttons bigger under Mint-Y. The Muffin theme hardcodes the
+geometry, so the font has nothing to do with it:
+
+```bash
+grep -oE 'name="(button_width|button_height|title_vertical_pad)" value="[^"]*"' \
+  /usr/share/themes/Mint-Y/metacity-1/metacity-theme-3.xml
+#   button_width  = 32
+#   button_height = 30
+#   title_vertical_pad = 0
+```
+
+Measured `_NET_FRAME_EXTENTS` stayed at `0, 0, 32, 0` with the font at both 10
+and 16. No stock theme ships bigger buttons either — Mint-Y is 32x30, Mint-L is
+30x24, Mint-X is 0x0. Getting a genuinely larger close button means copying
+`Mint-Y/metacity-1/` to `~/.themes/<name>/metacity-1/`, raising those values, and
+pointing `org.cinnamon.desktop.wm.preferences theme` at it.
+
+Also note **Chrome is unaffected either way** — it draws its own frame and has no
+`_NET_FRAME_EXTENTS` at all. Making Chrome's controls bigger is a separate job:
+either set `browser.custom_chrome_frame = false` in its Preferences to use the
+system titlebar, or add `--force-device-scale-factor=1.25` to its `Exec=`.
+
+Measure titlebar height directly rather than eyeballing a screenshot:
+
+```bash
+xprop -id <winid> _NET_FRAME_EXTENTS     # left, right, top, bottom -- top is the titlebar
+```
+
+Pick the window id from the class column, not a title substring:
+`wmctrl -lx | awk '$3 ~ /^nemo\.Nemo$/ {print $1}'`. Matching on titles grabs
+`nemo-desktop` (the desktop icon layer), which has no frame and reports
+"not found", which looks like a failure but is just the wrong window.
 
 ## Measuring a desktop change from a screenshot
 
