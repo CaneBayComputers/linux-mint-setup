@@ -274,6 +274,45 @@ There is no pointer-trail feature in Cinnamon or X11 — no gsettings key, no
 - A high-visibility cursor theme — `GoogleDot-Black`, `HighContrast` and
   `XCursor-Pro-*` ship with Mint (`ls /usr/share/icons/`).
 
+## Capping the number of Chrome windows
+
+`chrome-window-limit.sh` in this repo. Install and autostart it per user:
+
+```bash
+install -m 755 chrome-window-limit.sh ~/.local/bin/
+cat > ~/.config/autostart/chrome-window-limit.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Chrome window limit
+Exec=/bin/bash -c "exec /home/owner/.local/bin/chrome-window-limit.sh >> /home/owner/.cache/chrome-window-limit.log 2>&1"
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF
+```
+
+Use `~/.config/autostart` rather than a systemd user unit — an autostart entry
+inherits `DISPLAY` and `DBUS_SESSION_BUS_ADDRESS` from the session, which a user
+unit does not. Desktop entries do **not** expand `$HOME`, so paths must be
+absolute.
+
+How it decides which window is "oldest": EWMH defines `_NET_CLIENT_LIST` as
+initial mapping order, and that is what `wmctrl -l` prints — so the first Chrome
+line is the oldest window. No state file needed. Verified by opening four
+windows with distinct titles and confirming the order came back ONE→FOUR.
+
+Two behaviours worth keeping if you rewrite it:
+
+- **Never close the focused window.** Compare against
+  `xprop -root _NET_ACTIVE_WINDOW`, normalising to int — `xprop` prints
+  `0x2000004` while `wmctrl` prints `0x02000004`, so string comparison fails.
+- **Close with `wmctrl -i -c`** (`WM_DELETE_WINDOW`), never a signal, or Chrome
+  records a crash and greets the customer with "Restore pages?".
+
+> **Testing gotcha:** don't open several test windows pointing at the same URL —
+> they all get the same title and you cannot tell the ordering. Write throwaway
+> local pages with distinct `<title>` values and open `file:///tmp/wONE.html`.
+
 ## Titlebar height / close button size — mostly a dead end
 
 Raising `org.cinnamon.desktop.wm.preferences titlebar-font` does **not** make the
