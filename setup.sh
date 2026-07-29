@@ -47,6 +47,42 @@ confirm "Remove LibreOffice Writer/Impress/Draw/Math/Base? (Calc is kept)" && RE
 DISABLE_BLUETOOTH=0
 confirm "Disable Bluetooth? (bluetooth + blueman-mechanism services)" && DISABLE_BLUETOOTH=1
 
+# ---------------- APT mirrors ----------------
+# Point Main (Mint) and Base (Ubuntu) at fast mirrors. Codenames are read from
+# /etc/os-release so this keeps working across Mint releases. The -security line
+# is deliberately left on security.ubuntu.com -- that's what Mint's own Software
+# Sources tool does, so security updates come straight from Canonical.
+MINT_MIRROR="https://fastly.linuxmint.io"
+BASE_MIRROR="http://mirror.nodesdirect.com/ubuntu"
+REPO_LIST="/etc/apt/sources.list.d/official-package-repositories.list"
+
+log "Setting APT mirrors..."
+MINT_CODENAME="$(. /etc/os-release 2>/dev/null && echo "${VERSION_CODENAME:-}")"
+UBUNTU_BASE="$(. /etc/os-release 2>/dev/null && echo "${UBUNTU_CODENAME:-}")"
+
+if [[ -z "$MINT_CODENAME" || -z "$UBUNTU_BASE" ]]; then
+  echo "  !! Could not detect Mint/Ubuntu codenames; leaving sources untouched"
+else
+  echo "  -> Mint '$MINT_CODENAME' -> $MINT_MIRROR"
+  echo "  -> Base '$UBUNTU_BASE' -> $BASE_MIRROR"
+  if [[ -f "$REPO_LIST" ]]; then
+    BACKUP="$REPO_LIST.bak-$(date +%Y%m%d%H%M%S)"
+    sudo cp "$REPO_LIST" "$BACKUP"
+    echo "  -> Backed up existing list to $BACKUP"
+  fi
+  sudo tee "$REPO_LIST" >/dev/null <<EOF
+deb $MINT_MIRROR $MINT_CODENAME main upstream import backport
+
+deb $BASE_MIRROR $UBUNTU_BASE main restricted universe multiverse
+deb $BASE_MIRROR $UBUNTU_BASE-updates main restricted universe multiverse
+deb $BASE_MIRROR $UBUNTU_BASE-backports main restricted universe multiverse
+
+deb http://security.ubuntu.com/ubuntu/ $UBUNTU_BASE-security main restricted universe multiverse
+EOF
+  log "Refreshing package lists..."
+  sudo apt-get update -q || echo "  !! apt-get update reported errors; continuing"
+fi
+
 # ---------------- System cleanup (from remove_software.sh) ----------------
 log "Purging unwanted packages..."
 PKGS=(
@@ -148,3 +184,26 @@ gsettings set org.cinnamon.settings-daemon.plugins.color night-light-enabled fal
 log "Final cleanup..."
 sudo apt-get autoremove -y -q || true
 sudo apt-get autoclean -y -q || true
+
+# ---------------- Update Manager automation ----------------
+# Mirrors Update Manager -> Preferences -> Automation:
+#   upgrade    = "Apply updates automatically"
+#   autoremove = "Remove obsolete kernels and dependencies"
+# Enabling 'upgrade' also installs the update blacklist, per mintupdate-automation.
+# Done last so the automation timers can't fire while we still hold the dpkg lock.
+log "Configuring Update Manager automation..."
+if ! command -v mintupdate-automation >/dev/null 2>&1; then
+  echo "  !! mintupdate-automation not found (not Linux Mint?); skipping"
+else
+  for AUTOMATION in upgrade autoremove; do
+    echo "  -> Enabling '$AUTOMATION'"
+    sudo mintupdate-automation "$AUTOMATION" enable || echo "     !! Failed to enable $AUTOMATION"
+  done
+  for FLAG in mintupdate-automatic-upgrades-enabled mintupdate-automatic-removals-enabled; do
+    if [[ -e "/var/lib/linuxmint/$FLAG" ]]; then
+      echo "     [ok] $FLAG"
+    else
+      echo "     !! $FLAG missing -- automation may not be active"
+    fi
+  done
+fi
