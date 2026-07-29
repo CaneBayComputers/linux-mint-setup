@@ -125,6 +125,7 @@ PKGS=(
   hypnotix
   "redshift*"
   rhythmbox
+  rhythmbox-data  # orphaned by the rhythmbox purge; autoremove misses it
   "thunderbird*"
   warpinator
   webapp-manager
