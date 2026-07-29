@@ -313,6 +313,32 @@ Two behaviours worth keeping if you rewrite it:
 > they all get the same title and you cannot tell the ordering. Write throwaway
 > local pages with distinct `<title>` values and open `file:///tmp/wONE.html`.
 
+## Per-site window-list icons for Chrome — dead end, don't retry
+
+Goal was: click the Yahoo launcher, get a Yahoo icon on that window's button in
+the window list instead of the generic Chrome icon. Cinnamon picks the window
+list icon by matching the **class** field of `WM_CLASS` to a `.desktop` file, so
+every Chrome window needs its own class. Tested on Mint 22.3, all negative:
+
+| Attempt | Resulting `WM_CLASS` | Icon |
+|---|---|---|
+| `--class=X`, Chrome **not** running | `google-chrome.X` | works |
+| `--class=X`, Chrome **already** running | `google-chrome.<first class>` | ignored |
+| `--app=https://site`, clean start | `site.Google-chrome` | still Chrome's |
+| `--user-data-dir=... --class=X` | first-run wizard, `WM_CLASS` not set | no |
+
+The blocker: Chrome sets `WM_CLASS` **once per process**. Extra windows are
+created by the already-running instance and inherit its class, so `--class` only
+ever affects the very first launch. `--app` mode does vary the *instance* field
+per site (`www.postandcourier.com.Google-chrome`), but Cinnamon matches on the
+class field, so the icon is unchanged — and app mode also loses the tab strip
+and address bar.
+
+A separate `--user-data-dir` per site does spawn a real second process that
+honours `--class`, but it costs a separate profile (separate logins, history,
+passwords), a first-run wizard, and ~190 MB RSS per extra instance. Not worth it
+for a couple of panel icons.
+
 ## Titlebar height / close button size — mostly a dead end
 
 Raising `org.cinnamon.desktop.wm.preferences titlebar-font` does **not** make the
